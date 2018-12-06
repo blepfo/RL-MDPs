@@ -71,7 +71,12 @@ class FLMDP(object):
         P = self.P
         P0 = self.P0
 
-        trajectories = np.zeros((m, T), dtype=np.float32)
+        # s_t goes from 
+        s_t = np.zeros((m, T), dtype=np.float32)
+        a_t = np.zeros((m, T), dtype=np.float32)
+        r_t = np.zeros((m, T), dtype=np.float32)
+
+
 
         # Sample initial state for each trajectory
         trajectories[:, 0] = 1 + self.P0.rvs(size=(m, 1))
