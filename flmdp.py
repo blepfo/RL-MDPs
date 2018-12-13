@@ -1,5 +1,7 @@
 import logging
+
 import numpy as np
+import itertools as it
 
 from collections import deque
 from scipy.stats import rv_discrete, rv_continuous
@@ -22,8 +24,10 @@ class FLMDP(object):
         mag_A (int): Cardinality of the finite action space.
         P (Distribution): Next state/reward distribution given the current history and action,
             P(s_{t+1} | h_t, a_t) = P[h_t[0], ..., h_t[l-1], a_t, s_{t+1}]
-            Represented as a numpy array of shape (mag_S, ..., mag_S, mag_A, mag_S, 1)
-            where len(shape)==
+            Represented as a numpy array of shape (mag_S, ..., mag_S, mag_A, mag_S, 2)
+            so that p = P[tuple(h)+(a,)][i] is an array of shape (2, 1) so that
+                * p[0] = probability next state is state i
+                * p[1] = reward associated with transitioning to the next state
         P0 (Distribution): Probability distribution over initial states, so
             P(s_{0}=s) = P0[s]
             Represented as a numpy array of shape (mag_S, 1)
@@ -57,7 +61,8 @@ class FLMDP(object):
                            dtype=np.int32)
 
 
-    def simulate(pi: Distribution,
+    def simulate(self, 
+                 pi: Distribution,
                  T: int,
                  m: int):
         """Generate sample trajectories using given policy.
@@ -78,27 +83,137 @@ class FLMDP(object):
         P0 = self.P0
 
         # s_t from t=0, ..., T
-        s_t = np.zeros((m, T+1), dtype=np.float32)
+        s_t = np.zeros((m, T+1), dtype=np.int32)
         # a_t from t=0, ..., T-1
-        a_t = np.zeros((m, T), dtype=np.float32)
+        a_t = np.zeros((m, T), dtype=np.int32)
         # r_t from t=1, ..., T
         r_t = np.zeros((m, T), dtype=np.float32)
 
-        s_t[:, 0] = 1 + np.random.choice(S, size=(m, 1))
+        # Initial states for each trajectory
+        s_t[:, 0] = np.random.choice(S, size=(m,))
 
-        # Generate M trajectories (s0, a0, r1, s1, a1, r2, s2, ...)
-        for i in range(M):
+        # Generate m trajectories 
+        for i in range(m):
             # Initialize history to 0 state
             h = deque((0,)*l, maxlen=l)
             for t in range(0, T):
                 # Update history to include the current state
-                h.appendLeft(s_t[t])
+                h.appendleft(s_t[i, t])
                 # Sample action according to policy
-                a_dist = pi[h, ...]
+                a_dist = pi[tuple(h)]
                 a = np.random.choice(A, p=a_dist)
-                a[t] = a
                 # Generate reward and next state
-                P[h, a
+                p = P[tuple(h)+(a,)] 
+                # p[:, 0] is distribution over next states
+                # p[i, 1] is reward for transitioning to state i
+                s = np.random.choice(S, p=p[:, 0])
+                r = p[s-1][1]
+                # Save current time step
+                s_t[i, t+1] = s
+                a_t[i, t] = a
+                r_t[i, t] = r
 
-                r[t] = r
-                s[t+1] = s
+        return s_t, a_t, r_t
+
+
+    def random_P(mag_S: int,
+                 mag_A: int,
+                 l: int):
+        """Generate random next state/reward distribution tensor.
+
+        Args:
+            mag_S (int): Cardinality of the finite state space.
+            mag_A (int): Cardinality of the finite action space.
+            l (int): Number of states that matter to the environment when determining the next state.
+
+        Returns: 
+            P (Distribution): Next state/reward distribution given the current history and action,
+                P(s_{t+1} | h_t, a_t) = P[h_t[0], ..., h_t[l-1], a_t, s_{t+1}]
+                Represented as a numpy array of shape (mag_S, ..., mag_S, mag_A, mag_S, 2)
+                so that p = P[tuple(h)+(a,)][i] is an array of shape (2, 1) so that
+                    * p[0] = probability next state is state i
+                    * p[1] = reward associated with transitioning to the next state
+
+        """
+        shape = ((mag_S+1,)*l) + (mag_A, mag_S, 2)
+        P = np.random.random(size=shape)
+
+        # Generate tuples to access p=P[(tuple(h)+(a,)]
+        history_sizes = it.repeat(list(range(mag_S+1)), l)
+        dist_sizes = it.chain(history_sizes, [list(range(mag_A))])
+        history_actions = it.product(*dist_sizes)
+
+        for history_action in history_actions:
+            # Normalize the next state distribution 
+            p = P[tuple(history_action)]
+            p[:, 0] = softmax(p[:, 0])
+            # Use positive and negative reward values
+            for i in range(mag_S):
+                if np.random.random() > 0.5:
+                    p[i, 1] *= -1
+
+        return P
+
+
+    def random_pi(mag_S: int,
+                  mag_A: int,
+                  l: int):
+        """Generate random policy tensor.
+
+        Args:
+            mag_S (int): Cardinality of the finite state space.
+            mag_A (int): Cardinality of the finite action space.
+            l (int): Number of states that matter to the environment when determining the next state.
+
+        pi (Distribution): Policy distribution over actions given the current history.
+
+        """
+        shape = ((mag_S+1,)*l) + (mag_A,)
+        pi = np.random.random(size=shape)
+
+        # Generate tuples to access pi[(tuple(h)]
+        history_sizes = it.repeat(list(range(mag_S+1)), l)
+        histories = it.product(*history_sizes)
+        
+        for history in histories:
+            # Normalize the next action distribution 
+            pi[tuple(history)] = softmax(pi[tuple(history)])
+
+        return pi
+
+
+def softmax(x):
+    e_x = np.exp(x - np.max(x))
+    return e_x / e_x.sum()
+
+
+
+
+if __name__ == "__main__":
+    mag_S = 3
+    mag_A = 2
+    l = 2
+
+    # Create example MDP
+    P0 = (1.0 / float(mag_S)) * np.ones((mag_S))
+    P = FLMDP.random_P(mag_S=mag_S,
+                       mag_A=mag_A,
+                       l=l)
+    lmdp = FLMDP(mag_S=mag_S,
+                 mag_A=mag_A,
+                 P=P,
+                 P0=P0,
+                 l=l)
+
+    # Simulate trajectories with example policy
+    pi = FLMDP.random_pi(mag_S=mag_S,
+                         mag_A=mag_A,
+                         l=l)
+
+    s_t, r_t, a_t = lmdp.simulate(pi=pi,
+                                  T=10,
+                                  m=5)
+ 
+    print(s_t)
+    print(r_t)
+    print(a_t)
