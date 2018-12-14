@@ -1,19 +1,12 @@
 """ Approximates an RL policy from sample episodes. """
 
-import numpy as np
 import itertools as it
-
 from collections import deque
-from typing import Deque, Dict, Tuple, TypeVar
+from typing import Deque, Dict, Tuple
 
-import flmdp
+import numpy as np
 
-from _types import History
-from _types import State
-from _types import Action
-from _types import Reward
-
-Position = TypeVar(int)
+from _types import Action, History, Position, State
 
 # actions_path = "./output/test_actions.csv"
 # actions = pd.read_csv(actions_path, header=None)
@@ -22,12 +15,13 @@ Position = TypeVar(int)
 # rewards_path = "./output/test_rewards.csv"
 # rewards = pd.read_csv(rewards_path, header=None)
 
-def naive_approx(states: np.ndarray, 
-                 actions: np.ndarray, 
-                 rewards: np.ndarray, 
+
+def naive_approx(states: np.ndarray,
+                 actions: np.ndarray,
+                 rewards: np.ndarray,
                  l: int) -> dict:
     """Approximates a policy as a Monte-Carlo estimate of the action taken from each history.
-    
+
     """
     T = actions.shape[1]
     m = actions.shape[0]
@@ -53,20 +47,20 @@ def naive_approx(states: np.ndarray,
     naive_probabilities: Dict[Tuple[History, Action], float] = {}
 
     for (history, action), count in history_action_counts.items():
-        naive_probabilities[(history, action)] = float(
+        naive_probabilities[(history) + (action,)] = float(
             count) / float(history_counts[history])
 
     return naive_probabilities
 
 
-def sc_probability(history: History, 
-                   action: Action, 
+def sc_probability(history: History,
+                   action: Action,
                    Gamma: float,
-                   positional_state_counts: dict, 
-                   positional_state_action_counts: dict, 
-                   l: int)  -> float:
+                   positional_state_counts: dict,
+                   positional_state_action_counts: dict,
+                   l: int) -> float:
     """Gets the probability estimate of an action given a specific history.
-    
+
     """
     probability = 0
 
@@ -79,13 +73,13 @@ def sc_probability(history: History,
     return probability * (1.0 - Gamma) / (1.0 - Gamma**(l))
 
 
-def sparsity_corrected_approx(states: np.ndarray, 
-                              actions: np.ndarray, 
+def sparsity_corrected_approx(states: np.ndarray,
+                              actions: np.ndarray,
                               rewards: np.ndarray,
                               Gamma: float,
                               lmdp) -> dict:
     """ Approximates a policy using the sparsity corrected method. 
-    
+
     """
     T = actions.shape[1]
     m = actions.shape[0]
@@ -99,7 +93,8 @@ def sparsity_corrected_approx(states: np.ndarray,
     assert states.shape[1] - 1 == T
 
     positional_state_counts: Dict[Tuple[State, Position], int] = {}
-    positional_state_action_counts: Dict[Tuple[State, Position, Action], int] = {} 
+    positional_state_action_counts: Dict[Tuple[State, Position, Action], int] = {
+    }
     history_deque: Deque[State] = deque((0,) * l, maxlen=l)
 
     for i in range(m):
