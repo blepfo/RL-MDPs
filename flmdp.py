@@ -7,11 +7,11 @@ from collections import deque
 from scipy.stats import rv_discrete, rv_continuous
 from typing import Tuple, Union, Callable, TypeVar
 
-# Define alias types for clearer documentation
-History = TypeVar(np.array)
-State = TypeVar(int)
-Action = TypeVar(int)
-Distribution = TypeVar(np.ndarray)
+from policy_approximators import sparsity_corrected_approx
+from _types import State
+from _types import Action
+from _types import History
+from _types import Distribution
 
 logger = logging.getLogger('lmdp.FLMDP')
 
@@ -182,6 +182,55 @@ class FLMDP(object):
         return pi
 
 
+    def scips_approximable_pi(lmdp,
+                              Gamma: float,
+                              sigma: float,
+                              T=100,
+                              m=1000) -> Distribution:
+        """Generate policy tensor under SCIPS assumption. 
+
+        Args:
+            lmdp (FLMDP): FLMDP for which to make SCIPS approximable pi. 
+            Gamma (float): Time discounting parameter used in the SCIPS,
+                in [0.0, 1.0].
+            sigma (float): TODO
+            T (int): Trajectory length.
+            m (int): Number of trajectories to simulate.
+
+        pi (Distribution): Policy distribution over actions given the current history.
+
+        """
+        # Start with a random pi
+        pi = FLMDP.random_pi(mag_S=lmdp.mag_S,
+                             mag_A=lmdp.mag_A,
+                             l=lmdp.l)
+
+        # Simuate some trajectories
+        s_t, r_t, a_t = lmdp.simulate(pi=pi,
+                                      T=T,
+                                      m=m)
+
+        # Fit pi to SCIPS
+        scips = sparsity_corrected_approx(states=s_t,
+                                          actions=a_t,
+                                          rewards=r_t,
+                                          l=lmdp.l,
+                                          Gamma=Gamma)
+
+        for history_action in scips:
+            scips[history_action] += np.random.normal(scale=sigma)
+
+        # Generate tuples to access pi[(tuple(h)]
+        history_sizes = it.repeat(list(range(lmdp.mag_S+1)), lmdp.l)
+        histories = it.product(*history_sizes)
+        
+        for history in histories:
+            # Normalize the next action distribution 
+            pi[tuple(history)] = softmax(pi[tuple(history)])
+
+        return pi
+        
+
 def softmax(x):
     e_x = np.exp(x - np.max(x))
     return e_x / e_x.sum()
@@ -190,9 +239,10 @@ def softmax(x):
 
 
 if __name__ == "__main__":
-    mag_S = 3
-    mag_A = 2
-    l = 2
+    mag_S = 25 
+    mag_A = 4
+    l = 3
+    T=100
 
     # Create example MDP
     P0 = (1.0 / float(mag_S)) * np.ones((mag_S))
@@ -211,8 +261,8 @@ if __name__ == "__main__":
                          l=l)
 
     s_t, r_t, a_t = lmdp.simulate(pi=pi,
-                                  T=10,
-                                  m=5)
+                                  T=100,
+                                  m=1000)
  
     print(s_t)
     print(r_t)
