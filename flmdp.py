@@ -155,19 +155,19 @@ class FLMDP(object):
         return P
 
 
-    def random_pi(mag_S: int,
-                  mag_A: int,
-                  l: int):
+    def random_pi(lmdp) -> Distribution: 
         """Generate random policy tensor.
 
         Args:
-            mag_S (int): Cardinality of the finite state space.
-            mag_A (int): Cardinality of the finite action space.
-            l (int): Number of states that matter to the environment when determining the next state.
+            lmdp (FLMDP): L-MDP to create the policy for.
 
         pi (Distribution): Policy distribution over actions given the current history.
 
         """
+        mag_S = lmdp.mag_S
+        mag_A = lmdp.mag_A
+        l = lmdp.l
+
         shape = ((mag_S+1,)*l) + (mag_A,)
         pi = np.random.random(size=shape)
 
@@ -200,10 +200,12 @@ class FLMDP(object):
         pi (Distribution): Policy distribution over actions given the current history.
 
         """
+        mag_S = lmdp.mag_S
+        mag_A = lmdp.mag_A
+        l = lmdp.l
+
         # Start with a random pi
-        pi = FLMDP.random_pi(mag_S=lmdp.mag_S,
-                             mag_A=lmdp.mag_A,
-                             l=lmdp.l)
+        pi = FLMDP.random_pi(lmdp=lmdp)
 
         # Simuate some trajectories
         s_t, r_t, a_t = lmdp.simulate(pi=pi,
@@ -214,18 +216,17 @@ class FLMDP(object):
         scips = sparsity_corrected_approx(states=s_t,
                                           actions=a_t,
                                           rewards=r_t,
-                                          l=lmdp.l,
-                                          Gamma=Gamma)
+                                          Gamma=Gamma,
+                                          lmdp=lmdp)
 
         for history_action in scips:
             scips[history_action] += np.random.normal(scale=sigma)
 
-        # Generate tuples to access pi[(tuple(h)]
+        # Normalize the next action distribution 
         history_sizes = it.repeat(list(range(lmdp.mag_S+1)), lmdp.l)
         histories = it.product(*history_sizes)
         
         for history in histories:
-            # Normalize the next action distribution 
             pi[tuple(history)] = softmax(pi[tuple(history)])
 
         return pi
@@ -256,9 +257,7 @@ if __name__ == "__main__":
                  l=l)
 
     # Simulate trajectories with example policy
-    pi = FLMDP.random_pi(mag_S=mag_S,
-                         mag_A=mag_A,
-                         l=l)
+    pi = FLMDP.random_pi(lmdp=lmdp)
 
     s_t, r_t, a_t = lmdp.simulate(pi=pi,
                                   T=100,

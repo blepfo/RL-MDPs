@@ -1,10 +1,12 @@
 """ Approximates an RL policy from sample episodes. """
 
 import numpy as np
+import itertools as it
 
 from collections import deque
-from itertools import islice, product
 from typing import Deque, Dict, Tuple, TypeVar
+
+import flmdp
 
 from _types import History
 from _types import State
@@ -20,8 +22,8 @@ Position = TypeVar(int)
 # rewards_path = "./output/test_rewards.csv"
 # rewards = pd.read_csv(rewards_path, header=None)
 
-def naive_approx(actions: np.ndarray, 
-                 states: np.ndarray, 
+def naive_approx(states: np.ndarray, 
+                 actions: np.ndarray, 
                  rewards: np.ndarray, 
                  l: int) -> dict:
     """Approximates a policy as a Monte-Carlo estimate of the action taken from each history.
@@ -40,11 +42,11 @@ def naive_approx(actions: np.ndarray,
 
     for i in range(m):
         trajectory = states[i, :]
-        for t, state in islice(trajectory.items(), 0, T):
+        for t, state in it.islice(enumerate(trajectory), 0, T-1):
             history_deque.appendleft(state)
             history_counts[tuple(history_deque)] = history_counts.get(
                 tuple(history_deque), 0) + 1
-            context = (tuple(history_deque), actions[t][i])
+            context = (tuple(history_deque), actions[i, t])
             history_action_counts[context] = history_action_counts.get(
                 context, 0) + 1
 
@@ -80,11 +82,17 @@ def sc_probability(history: History,
 def sparsity_corrected_approx(states: np.ndarray, 
                               actions: np.ndarray, 
                               rewards: np.ndarray,
-                              l: int, Gamma: float) -> dict:
-    """ Approximates a policy using the sparsity corrected method. """
-
+                              Gamma: float,
+                              lmdp) -> dict:
+    """ Approximates a policy using the sparsity corrected method. 
+    
+    """
     T = actions.shape[1]
     m = actions.shape[0]
+
+    l = lmdp.l
+    mag_S = lmdp.mag_S
+    mag_A = lmdp.mag_A
 
     assert rewards.shape == actions.shape
     assert states.shape[0] == m
@@ -96,22 +104,27 @@ def sparsity_corrected_approx(states: np.ndarray,
 
     for i in range(m):
         trajectory = states[i, :]
-        for t, state in islice(enumerate(trajectory), 0, T):
+        for t, state in it.islice(enumerate(trajectory), 0, T-1):
             history_deque.appendleft(state)
             for k, state_in_history in enumerate(history_deque):
                 state_context: Tuple[State, Position] = (state_in_history, k)
                 positional_state_counts[state_context] = positional_state_counts.get(
                     state_context, 0) + 1
                 state_action_context: Tuple[State, Position, Action] = (
-                    state_in_history, k, actions[t][i])
+                    state_in_history, k, actions[i, t])
                 positional_state_action_counts[state_action_context] = \
                     positional_state_action_counts.get(
                         state_action_context, 0) + 1
 
+    history_sizes = it.repeat(list(range(mag_S+1)), l)
+    history_action_sizes = it.chain(history_sizes, [list(range(mag_A))])
+    history_actions = it.product(*history_action_sizes)
+
     sc_history_action_probabilities = {}
-    for history, action in \
-            product(product(list(np.unique(states.values)) + [0], repeat=l), np.unique(actions.values)):
-        sc_history_action_probabilities[history, action] = \
+    for history_action in history_actions:
+        history = history_action[:-1]
+        action = history_action[-1]
+        sc_history_action_probabilities[history_action] = \
             sc_probability(history, action, Gamma, positional_state_counts,
                            positional_state_action_counts, l)
 
