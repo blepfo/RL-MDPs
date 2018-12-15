@@ -9,7 +9,7 @@ from policy_approximators import naive_approx, sparsity_corrected_approx
 from step_is import step_is
 
 # L-MDP params
-base_mag_S = 2
+base_mag_S = 5
 base_mag_A = 5
 base_l = 4
 base_sigma = 0
@@ -28,11 +28,11 @@ naive_returns = list()
 sc_returns = list()
 true_returns = list()
 
-for iteration in range(19):
+for iteration in range(100):
     l = base_l
     sigma = base_sigma
     mag_A = base_mag_A
-    mag_S = base_mag_S + iteration
+    mag_S = base_mag_S
     print(iteration)
 
     # Deterministic initial state distribution
@@ -49,9 +49,10 @@ for iteration in range(19):
                  P0=P0,
                  l=l)
 
-    pi_b = FLMDP.scips_approximable_pi(lmdp=lmdp,
-                                       Gamma=Gamma,
-                                       sigma=sigma)
+    # pi_b = FLMDP.scips_approximable_pi(lmdp=lmdp,
+    #                                    Gamma=Gamma,
+    #                                    sigma=sigma)
+    pi_b = FLMDP.random_pi(lmdp=lmdp)
     pi_e = FLMDP.random_pi(lmdp=lmdp)
 
     s_b, a_b, r_b = lmdp.simulate(pi=pi_b,
@@ -127,9 +128,9 @@ for iteration in range(19):
     average_return = total_returns / r_e.shape[0]
     true_returns.append(average_return)
 
-pickle.dump(rmses_naive, open('rmses_native_s.pickle', 'wb'))
-pickle.dump(rmses_sc, open('rmses_sc_s.pickle', 'wb'))
-pickle.dump(perfect_returns, open('perfect_returns_s.pickle', 'wb'))
-pickle.dump(naive_returns, open('naive_returns_s.pickle', 'wb'))
-pickle.dump(sc_returns, open('sc_returns_s.pickle', 'wb'))
-pickle.dump(true_returns, open('true_returns_s.pickle', 'wb'))
+pickle.dump(rmses_naive, open('rmses_native_random.pickle', 'wb'))
+pickle.dump(rmses_sc, open('rmses_sc_random.pickle', 'wb'))
+pickle.dump(perfect_returns, open('perfect_returns_random.pickle', 'wb'))
+pickle.dump(naive_returns, open('naive_returns_random.pickle', 'wb'))
+pickle.dump(sc_returns, open('sc_returns_random.pickle', 'wb'))
+pickle.dump(true_returns, open('true_returns_random.pickle', 'wb'))

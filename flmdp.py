@@ -215,14 +215,14 @@ class FLMDP(object):
                                           lmdp=lmdp)
 
         for history_action in scips:
-            scips[history_action] += np.random.normal(scale=sigma)
+            scips[history_action] += np.random.normal(loc=0, scale=sigma)
 
         # Normalize the next action distribution
         history_sizes = it.repeat(list(range(lmdp.mag_S+1)), lmdp.l)
         histories = it.product(*history_sizes)
 
         for history in histories:
-            pi[tuple(history)] = softmax(pi[tuple(history)])
+            pi[tuple(history)] = l1_normalize(pi[tuple(history)])
 
         return pi
 
@@ -230,6 +230,10 @@ class FLMDP(object):
 def softmax(x):
     e_x = np.exp(x - np.max(x))
     return e_x / e_x.sum()
+
+
+def l1_normalize(x):
+    return x / x.sum()
 
 
 if __name__ == "__main__":
