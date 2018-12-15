@@ -44,10 +44,10 @@ def naive_approx(states: np.ndarray,
             history_action_counts[context] = history_action_counts.get(
                 context, 0) + 1
 
-    naive_probabilities: Dict[Tuple[History, Action], float] = {}
+    naive_probabilities: Dict[tuple, float] = {}
 
     for (history, action), count in history_action_counts.items():
-        naive_probabilities[(history) + (action,)] = float(
+        naive_probabilities[tuple(history) + (action,)] = float(
             count) / float(history_counts[history])
 
     return naive_probabilities
