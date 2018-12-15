@@ -78,7 +78,7 @@ def sparsity_corrected_approx(states: np.ndarray,
                               rewards: np.ndarray,
                               Gamma: float,
                               lmdp) -> dict:
-    """ Approximates a policy using the sparsity corrected method. 
+    """ Approximates a policy using the sparsity corrected method.
 
     """
     T = actions.shape[1]

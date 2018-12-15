@@ -1,17 +1,11 @@
+import itertools as it
 import logging
+from collections import deque
 
 import numpy as np
-import itertools as it
 
-from collections import deque
-from scipy.stats import rv_discrete, rv_continuous
-from typing import Tuple, Union, Callable, TypeVar
-
-from policy_approximators import sparsity_corrected_approx
-from _types import State
-from _types import Action
-from _types import History
 from _types import Distribution
+from policy_approximators import sparsity_corrected_approx
 
 logger = logging.getLogger('lmdp.FLMDP')
 
@@ -37,9 +31,9 @@ class FLMDP(object):
 
     """
 
-    def __init__(self, 
-                 mag_S: int, 
-                 mag_A: int, 
+    def __init__(self,
+                 mag_S: int,
+                 mag_A: int,
                  P: Distribution,
                  P0: Distribution,
                  l: int):
@@ -50,18 +44,17 @@ class FLMDP(object):
         self.l = l
 
         # 0 included for states where t < l
-        self.S = np.arange(start=1, 
-                           stop=mag_S+1, 
-                           step=1, 
+        self.S = np.arange(start=1,
+                           stop=mag_S+1,
+                           step=1,
                            dtype=np.int32)
 
-        self.A = np.arange(start=0, 
-                           stop=mag_A, 
-                           step=1, 
+        self.A = np.arange(start=0,
+                           stop=mag_A,
+                           step=1,
                            dtype=np.int32)
 
-
-    def simulate(self, 
+    def simulate(self,
                  pi: Distribution,
                  T: int,
                  m: int):
@@ -72,7 +65,7 @@ class FLMDP(object):
             T (int): Trajectory length.
             m (int): Number of trajectories to simulate.
 
-        Returns: 
+        Returns:
             trajectories (np.array): Matrix of trajectories, of shape (m, T)
 
         """
@@ -92,7 +85,7 @@ class FLMDP(object):
         # Initial states for each trajectory
         s_t[:, 0] = np.random.choice(S, size=(m,))
 
-        # Generate m trajectories 
+        # Generate m trajectories
         for i in range(m):
             # Initialize history to 0 state
             h = deque((0,)*l, maxlen=l)
@@ -103,7 +96,7 @@ class FLMDP(object):
                 a_dist = pi[tuple(h)]
                 a = np.random.choice(A, p=a_dist)
                 # Generate reward and next state
-                p = P[tuple(h)+(a,)] 
+                p = P[tuple(h)+(a,)]
                 # p[:, 0] is distribution over next states
                 # p[i, 1] is reward for transitioning to state i
                 s = np.random.choice(S, p=p[:, 0])
@@ -115,18 +108,19 @@ class FLMDP(object):
 
         return s_t, a_t, r_t
 
-
+    @staticmethod
     def random_P(mag_S: int,
                  mag_A: int,
-                 l: int):
+                 l: int,
+                 mean_reward: float):
         """Generate random next state/reward distribution tensor.
 
         Args:
             mag_S (int): Cardinality of the finite state space.
             mag_A (int): Cardinality of the finite action space.
-            l (int): Number of states that matter to the environment when determining the next state.
+            l (int): Number of states that matter to the environment when determining the next state
 
-        Returns: 
+        Returns:
             P (Distribution): Next state/reward distribution given the current history and action,
                 P(s_{t+1} | h_t, a_t) = P[h_t[0], ..., h_t[l-1], a_t, s_{t+1}]
                 Represented as a numpy array of shape (mag_S, ..., mag_S, mag_A, mag_S, 2)
@@ -144,18 +138,19 @@ class FLMDP(object):
         history_actions = it.product(*dist_sizes)
 
         for history_action in history_actions:
-            # Normalize the next state distribution 
+            # Normalize the next state distribution
             p = P[tuple(history_action)]
             p[:, 0] = softmax(p[:, 0])
             # Use positive and negative reward values
             for i in range(mag_S):
                 if np.random.random() > 0.5:
                     p[i, 1] *= -1
+                    p[i, 1] += mean_reward
 
         return P
 
-
-    def random_pi(lmdp) -> Distribution: 
+    @staticmethod
+    def random_pi(lmdp) -> Distribution:
         """Generate random policy tensor.
 
         Args:
@@ -174,23 +169,23 @@ class FLMDP(object):
         # Generate tuples to access pi[(tuple(h)]
         history_sizes = it.repeat(list(range(mag_S+1)), l)
         histories = it.product(*history_sizes)
-        
+
         for history in histories:
-            # Normalize the next action distribution 
+            # Normalize the next action distribution
             pi[tuple(history)] = softmax(pi[tuple(history)])
 
         return pi
 
-
+    @staticmethod
     def scips_approximable_pi(lmdp,
                               Gamma: float,
                               sigma: float,
                               T=100,
                               m=1000) -> Distribution:
-        """Generate policy tensor under SCIPS assumption. 
+        """Generate policy tensor under SCIPS assumption.
 
         Args:
-            lmdp (FLMDP): FLMDP for which to make SCIPS approximable pi. 
+            lmdp (FLMDP): FLMDP for which to make SCIPS approximable pi.
             Gamma (float): Time discounting parameter used in the SCIPS,
                 in [0.0, 1.0].
             sigma (float): TODO
@@ -222,34 +217,33 @@ class FLMDP(object):
         for history_action in scips:
             scips[history_action] += np.random.normal(scale=sigma)
 
-        # Normalize the next action distribution 
+        # Normalize the next action distribution
         history_sizes = it.repeat(list(range(lmdp.mag_S+1)), lmdp.l)
         histories = it.product(*history_sizes)
-        
+
         for history in histories:
             pi[tuple(history)] = softmax(pi[tuple(history)])
 
         return pi
-        
+
 
 def softmax(x):
     e_x = np.exp(x - np.max(x))
     return e_x / e_x.sum()
 
 
-
-
 if __name__ == "__main__":
-    mag_S = 25 
+    mag_S = 25
     mag_A = 4
     l = 3
-    T=100
+    T = 100
 
     # Create example MDP
     P0 = (1.0 / float(mag_S)) * np.ones((mag_S))
     P = FLMDP.random_P(mag_S=mag_S,
                        mag_A=mag_A,
-                       l=l)
+                       l=l,
+                       mean_reward=100)
     lmdp = FLMDP(mag_S=mag_S,
                  mag_A=mag_A,
                  P=P,
@@ -262,7 +256,7 @@ if __name__ == "__main__":
     s_t, r_t, a_t = lmdp.simulate(pi=pi,
                                   T=100,
                                   m=1000)
- 
+
     print(s_t)
     print(r_t)
     print(a_t)

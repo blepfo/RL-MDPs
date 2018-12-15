@@ -59,4 +59,4 @@ def step_is(pi_b: dict,
 
         cumulative_reward += weighted_return
 
-    return cumulative_reward
+    return cumulative_reward / reward_samples.shape[0]
