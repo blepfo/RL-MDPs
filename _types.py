@@ -1,14 +1,18 @@
-from typing import TypeVar
+""" Defines alias types for documenation. """
+
+from typing import Type, Tuple
 
 import numpy as np
 
-# Define alias types for clearer documentation
-State = TypeVar(int)
-Action = TypeVar(int)
-Reward = TypeVar(float)
+State = int
+Action = int
+Reward = float
 
-History = TypeVar(np.array)
+Trajectory = Tuple[np.ndarray, np.ndarray, np.ndarray]
+History = Type[np.ndarray]
 
-Distribution = TypeVar(np.ndarray)
+Distribution = Type[np.ndarray]
 
-Position = TypeVar(int)
+Policy = Type[np.ndarray]
+
+Position = int
