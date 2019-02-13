@@ -9,6 +9,7 @@ import numpy as np
 from flmdp import FLMDP
 from policy_approximators import naive_approx, sparsity_corrected_approx
 from step_is import step_is
+from utils import history_action_tuples
 
 
 def main():
@@ -27,8 +28,8 @@ def main():
     true_returns = dict()
 
     for history_length, state_size, action_size, sigma, reward, use_approximable_pi in it.product(
-            range(1, 8), range(2, 21), range(2, 31), range(0, 11),
-            range(-100, 100, 10), [True, False]):
+            range(1, 2), range(2, 3), range(2, 3), range(0, 1), range(0, 1),
+        [False]):
         print(
             f"l={history_length}, mag_S={state_size}, mag_A={action_size}, sigma={sigma}, "
             + f"reward={reward}, use_approximable_pi={use_approximable_pi}")
@@ -100,13 +101,10 @@ def main():
         # All the data is there, now to turn it into statistics
 
         # First we compute the RMSE of the two approximations
-        history_sizes = it.repeat(list(range(state_size + 1)), history_length)
-        dist_sizes = it.chain(history_sizes, [list(range(action_size))])
-        history_actions = it.product(*dist_sizes)
-
         rmse_naive = 0.0
         rmse_sc = 0.0
-        for history_action in history_actions:
+        for history_action in history_action_tuples(state_size, action_size,
+                                                    history_length):
             rmse_naive += (pi_b[history_action] - hat_b.get(
                 (history_action), 0))**2
             rmse_sc += (pi_b[history_action] - tilde_b.get(

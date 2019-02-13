@@ -1,13 +1,13 @@
 """ Defines a finite l-th order MDP. """
 
-import itertools as it
 from collections import deque
 
 import numpy as np
 
 from _types import Distribution, Trajectory, Policy
 from policy_approximators import sparsity_corrected_approx
-from utils import softmax, l1_normalize, policy_shape
+from utils import l1_normalize, policy_shape, history_tuples, history_action_tuples, transitions_shape
+from scipy.special import softmax
 
 
 class FLMDP(object):
@@ -46,7 +46,7 @@ class FLMDP(object):
 
         # 0 included for states where time < history_length
         self.states = np.arange(
-            start=1, stop=state_size + 1, step=1, dtype=np.int32)
+            start=0, stop=state_size, step=1, dtype=np.int32)
 
         self.actions = np.arange(
             start=0, stop=action_size, step=1, dtype=np.int32)
@@ -83,8 +83,9 @@ class FLMDP(object):
 
         # Generate n_samples trajectories
         for i in range(n_samples):
-            # Initialize history to 0 state
-            history = deque((0, ) * history_length, maxlen=history_length)
+            # Initialize history to before-time-0 state state_size
+            history = deque(
+                (self.state_size, ) * history_length, maxlen=history_length)
             for time in range(0, time_horizon):
                 # Update history to include the current state
                 history.appendleft(s_t[i, time])
@@ -97,7 +98,7 @@ class FLMDP(object):
                 # p[:, 0] is distribution over next states
                 # p[i, 1] is reward for transitioning to state i
                 state = np.random.choice(states, p=transitions[:, 0])
-                reward = transitions[state - 1][1]
+                reward = transitions[state][1]
                 # Save current time step
                 s_t[i, time + 1] = state
                 a_t[i, time] = action
@@ -129,18 +130,14 @@ class FLMDP(object):
                     * p[1] = reward associated with transitioning to the next state
 
         """
-        shape = (
-            (state_size + 1, ) * history_length) + (action_size, state_size, 2)
-        transition_probability = np.random.random(size=shape)
+        transition_probability = np.random.random(
+            size=transitions_shape(state_size, action_size, history_length))
 
         # Generate tuples to access p=transition_probability[(tuple(history)+(action,)]
-        history_sizes = it.repeat(list(range(state_size + 1)), history_length)
-        dist_sizes = it.chain(history_sizes, [list(range(action_size))])
-        history_actions = it.product(*dist_sizes)
-
-        for history_action in history_actions:
+        for history_action in history_action_tuples(state_size, action_size,
+                                                    history_length):
             # Normalize the next state distribution
-            transitions = transition_probability[tuple(history_action)]
+            transitions = transition_probability[history_action]
             transitions[:, 0] = softmax(transitions[:, 0])
             # Use positive and negative reward values
             for i in range(state_size):
@@ -151,7 +148,7 @@ class FLMDP(object):
         return transition_probability
 
     @staticmethod
-    def random_pi(lmdp: FLMDP) -> Policy:
+    def random_pi(lmdp) -> Policy:
         """Generate random policy tensor.
 
         Args:
@@ -167,19 +164,14 @@ class FLMDP(object):
         random_policy = np.random.random(
             size=policy_shape(state_size, action_size, history_length))
 
-        # Generate tuples to access random_policy[(tuple(history)]
-        history_sizes = it.repeat(list(range(state_size + 1)), history_length)
-        histories = it.product(*history_sizes)
-
-        for history in histories:
+        for history in history_tuples(state_size, history_length):
             # Normalize the next action distribution
-            random_policy[tuple(history)] = softmax(
-                random_policy[tuple(history)])
+            random_policy[history] = softmax(random_policy[history])
 
         return random_policy
 
     @staticmethod
-    def scips_approximable_pi(lmdp: FLMDP,
+    def scips_approximable_pi(lmdp,
                               gamma: float,
                               sigma: float,
                               time_horizon=100,
@@ -216,11 +208,7 @@ class FLMDP(object):
             scips[history_action] += np.random.normal(loc=0, scale=sigma)
 
         # Normalize the next action distribution
-        history_sizes = it.repeat(
-            list(range(lmdp.state_size + 1)), lmdp.history_length)
-        histories = it.product(*history_sizes)
-
-        for history in histories:
-            scips[tuple(history)] = l1_normalize(scips[tuple(history)])
+        for history in history_tuples(lmdp.state_size, lmdp.history_length):
+            scips[history] = l1_normalize(scips[history])
 
         return scips
